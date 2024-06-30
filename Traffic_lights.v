@@ -33,6 +33,8 @@ module Traffic_lights(clk, rst, day_night, light_led, led_com, seg7_out, seg7_se
 	seg7_select #(2) M5(clk_sel, rst, seg7_sel);
 endmodule
 
+
+
 module count_logic(
 	 input day_night,
     input [7:0] g1_cnt,
@@ -46,12 +48,12 @@ module count_logic(
                 if (g1_cnt > 8'd9)
                     count_out = (seg7_sel == 3'b101) ? ((g1_cnt - 8'd9) % 10) : ((g1_cnt - 8'd9) / 10);
                 else 
-                    count_out = (seg7_sel == 3'b101) ? g1_cnt[3:0] : g1_cnt[7:4];
+                    count_out = 4'b0;
             else if (g2_cnt > 0) // counting down for light 2
                 if (g2_cnt > 8'd9)
                     count_out = (seg7_sel == 3'b101) ? ((g2_cnt - 8'd9) % 10) : ((g2_cnt - 8'd9) / 10);
                 else 
-                    count_out = (seg7_sel == 3'b101) ? g2_cnt[3:0] : g2_cnt[7:4];
+                    count_out = 4'b0;
             else
                 count_out = 4'd0;
         end else begin
@@ -59,7 +61,6 @@ module count_logic(
         end
     end
 endmodule
-
 
 module calculate_count(clk_fst, rst,day_night,seg7_sel,g1_cnt,g2_cnt,count_out);
 	 input clk_fst,rst,day_night,seg7_sel;
@@ -173,6 +174,8 @@ module ryg_ctl (clk_fst, clk_cnt_dn, rst, day_night, g1_cnt, g2_cnt, g1_en, g2_e
     end
 endmodule
 
+
+
 module light_cnt_dn_29 (clk, rst, enable, cnt);
 	input clk, rst, enable;
 	output[7:0] cnt;
@@ -183,16 +186,15 @@ module light_cnt_dn_29 (clk, rst, enable, cnt);
             cnt = 8'b0; // initial state
         else if (enable) begin
             if (cnt == 8'b0)
-                cnt = 8'd29; // wrap around to 29
-            else if (cnt[3:0] == 4'd0) begin // 20 -> 19, 10 -> 09
-                cnt[7:4] = cnt[7:4] - 1; // decrement tens place
-                cnt[3:0] = 4'd9; // set ones place to 9
-            end else
-                cnt = cnt - 1'b1; // decrement count
-        end else
-            cnt = 8'b0; // set cnt to 0 if enable is not set
+                cnt = 8'd29; 
+            else 
+                cnt = cnt - 1'b1; 
+		  end else
+				cnt = 8'b0; // set cnt to 0 if enable is not set
 	end
 endmodule
+
+
 
 
 module bcd_to_seg7(bcd_in, seg7);
