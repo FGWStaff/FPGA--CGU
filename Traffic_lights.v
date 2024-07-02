@@ -30,11 +30,38 @@ module Traffic_lights(clk, rst, day_night, light_led, led_com, seg7_out, seg7_se
 	traffic M3(clk_fst,clk_cnt_dn,rst,day_night,g1_cnt,g2_cnt,light_led);
 	
 	bcd_to_seg7 M4(count_out, seg7_out); // check again
-	seg7_select #(2) M5(clk_sel, rst, seg7_sel);
+	seg7_select #(6) M5(clk_sel, rst, seg7_sel);
 endmodule
 
 
+//this module will scan all digits on 7segments display and display number appropriatedly in g1_cnt(hang don vi, hang chuc) or g2_cnt
+module count_logic(
+	 input day_night,
+    input [7:0] g1_cnt,
+    input [7:0] g2_cnt,
+    input [2:0] seg7_sel,
+    output reg [3:0] count_out
+);
+    always @(*) begin
+        if (day_night) begin
+            if (seg7_sel == 3'b101) begin //right most
+					count_out = g1_cnt >= 8'd9 ?  ((g1_cnt - 8'd9) % 10) : g1_cnt[3:0];
+				end else if (seg7_sel == 3'b100) begin//second rightmost
+					count_out = g1_cnt >= 8'd9 ?  ((g1_cnt - 8'd9) / 10) : 4'b1111;
+				end else if (seg7_sel == 3'b011) begin
+					count_out = 4'b1111; //not display at this poistion
+				end else if (seg7_sel == 3'b010) begin//first character of count
+					count_out = g2_cnt >= 8'd9 ?  ((g2_cnt - 8'd9) % 10) : g2_cnt[3:0];
+				end else if (seg7_sel == 3'b0001) begin //second character of count
+					count_out = g2_cnt >= 8'd9 ?  ((g2_cnt - 8'd9) / 10) : 4'b1111;
+				end else 
+					count_out = 4'b1111; //not display at this poistion as 
+				end
+		end
+   
+endmodule
 
+/*
 module count_logic(
 	 input day_night,
     input [7:0] g1_cnt,
@@ -61,6 +88,7 @@ module count_logic(
         end
     end
 endmodule
+*/
 
 module calculate_count(clk_fst, rst,day_night,seg7_sel,g1_cnt,g2_cnt,count_out);
 	 input clk_fst,rst,day_night,seg7_sel;
