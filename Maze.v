@@ -11,9 +11,8 @@ module Maze(clk, row, red, green, column, sel, reset,seg7);
 	//output keyboard to test
 	output[6:0]seg7; // pin AB7,AA7,AB6,AB5,AA9,Y9,AB8 ;used for 7segment Led display
 	//
- 
 	wire ck, press, press_valid, coll;
-	wire [3:0]keycode, scancode, addr;
+	wire [3:0]keycode, scancode, addr, keyLed;
 	wire [2:0]idx;
 	wire [7:0]hor, ver; //saves the current position of the red dot
 	assign addr = { coll, idx };
@@ -21,7 +20,7 @@ module Maze(clk, row, red, green, column, sel, reset,seg7);
 	reg [3:0] keycode_and_empty;//added to test keyboard input
 	
 	key_decode M1 (sel, column, press, scancode); 
-	key_buff M2(ck, reset, press_valid, scancode, keycode);
+	key_buff M2(ck, reset, press_valid, scancode, keycode,keyLed);
 	debounce_ctl (ck, reset, press, press_valid);
 	
 	count6 M4 (ck, reset, sel);
@@ -37,29 +36,36 @@ module Maze(clk, row, red, green, column, sel, reset,seg7);
 	//add logic to print key pressed to the 7segment 
 	bcd_to_seg7 M11(keycode_and_empty, seg7);
 	always @(*) begin
-		if (sel == 3'b101) begin //(only the first left led)
-			 keycode_and_empty = keycode;
-		end else begin
-			 keycode_and_empty= 4'b1111; //black out other leds --b1001
-		end
+		if (sel == 3'b101)  //(only the first left led)
+			 keycode_and_empty <= keyLed;
+		else
+			 keycode_and_empty <= 4'b1111; //black out other leds 
 	end
 endmodule
 
 
-module key_buff(clk, rst, press_valid, scan_code, keycode);
+module key_buff(clk, rst, press_valid, scan_code, keycode,keyLed);
  
- input clk, rst, press_valid;
- input[3:0]   scan_code;
- output[3:0] keycode;
- reg[3:0]    keycode;
+input clk, rst, press_valid;
+input[3:0]   scan_code;
+output[3:0] keycode,keyLed;
+reg[3:0]    keycode,keyLed;
  
  always@(posedge clk or posedge rst) begin
-	if(rst)
+	if(rst) begin
 		keycode= 4'b0000;
-	else
-		keycode= press_valid ? scan_code : 4'b0000;
+		keyLed = 4'b1111;
+	end else begin
+		if (press_valid) begin
+			keycode <= scan_code;
+			keyLed <= scan_code;//
+		end else begin
+			keycode <= 4'b0000;
+			keyLed <= keyLed;//
+		end
+	end
  end
- endmodule
+endmodule
  
 module shift(left, right, reset, unable, out, clk);
 	input left, right, reset, clk, unable;
