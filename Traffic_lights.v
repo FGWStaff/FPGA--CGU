@@ -4,7 +4,7 @@ Light 1: Green 20s    Green flashing 5s  	Yellow 4s  	Red        Red
 Light 2  Red          Red		    			Red	    	Green 20s  Green flashing 5s
 
 */
-module Traffic_lights(clk, rst, day_night, light_led, led_com, seg7_out, seg7_sel);
+module Traffic_lights(clk, rst, day_night, light_led, led_com, seg7_out, seg7_sel,row, column_green, column_red);
 	 input clk;
 	 input rst;
 	 input day_night; //PIN_AA15 ->Switch1
@@ -17,25 +17,139 @@ module Traffic_lights(clk, rst, day_night, light_led, led_com, seg7_out, seg7_se
 	 wire[7:0] g1_cnt;
 	 wire[7:0] g2_cnt;
 	 wire[3:0] count_out;
+	 
+	 //man walking matching the lights
+	 //column_green/red compare the Lab1 pin
+	 wire clk_shift, clk_scan;
+	 wire[6:0] idx,idx_cnt, light2_color;
+	 wire[7:0] column_out;
+	 output[7:0] row, column_green, column_red;
+	//row:pin A7, B7, A5, B5, B6, C6, R21, T22
+	 
 
 	assign led_com= 1'b1;
 	
-	 	
 	count_logic M6(day_night, g1_cnt, g2_cnt, seg7_sel, count_out);
 	
 	freq_div#(23) M0(clk, rst, clk_cnt_dn);
 	freq_div#(21) M1(clk, rst, clk_fst);
 	freq_div#(15) M2(clk, rst, clk_sel);
 	
+	freq_div#(22) M100 (clk,rst,clk_shift);
+	freq_div#(12) M99 (clk,rst,clk_scan);
+	
 	traffic M3(clk_fst,clk_cnt_dn,rst,day_night,g1_cnt,g2_cnt,light_led);
 	
-	bcd_to_seg7 M4(count_out, seg7_out); // check again
+	bcd_to_seg7 M4(count_out, seg7_out); 
 	seg7_select #(6) M5(clk_sel, rst, seg7_sel);
+	
+	
+    light_color(g2_cnt,light2_color);
+	 idx_gen M11  (clk_shift, rst, light2_color, idx); 
+
+    assign column_green= (light2_color ==  2'b01 || light2_color ==  2'b10 )? column_out: 8'b0;
+	 assign column_red= (light2_color == 2'b00 || light2_color ==  2'b10)? column_out: 8'b0;
+
+	 //output the walking man based on the light 1
+    row_gen M8 (clk_scan, rst, idx, row, idx_cnt);
+    rom_char M9 (idx_cnt, column_out);
+
+    
+	
+endmodule
+
+module light_color(
+    input [7:0] g1_count,
+    output reg [1:0] color
+);
+
+    always @(*) begin
+        if (g1_count >= 10 && g1_count <= 29)
+            color = 2'b01; // Return 1 for this range
+        else if (g1_count >= 5 && g1_count <= 9)
+            color = 2'b10; // Return 2 for this range
+        else if (g1_count >= 1 && g1_count <= 4)
+            color = 2'b00; // Return 0 for this range
+        else
+            color = 2'b00; // Default case
+    end
+
 endmodule
 
 
-//this module will scan all digits on 7segments display and display number appropriatedly in g1_cnt(hang don vi, hang chuc) or g2_cnt
-module count_logic(
+
+module idx_gen(
+    input clk,
+    input rst,
+    input [1:0] color, // 00: standing, 01: walking, 02: running
+    output reg [6:0] idx
+);
+    reg [1:0] cnt;
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            idx <= 7'd0;
+            cnt <= 2'd0;
+        end else begin
+            case(color)
+                2'd0: begin //Standing
+                    idx <= 7'd8;
+                end
+                2'd1: begin //Walking
+                    if (cnt == 2'd0) begin
+                        idx <= 7'd16;
+                        cnt <= 2'd1;
+                    end else begin
+                        idx <= 7'd24;
+                        cnt <= 2'd0;
+                    end
+                end
+                2'd2: begin //Running
+                    if (cnt == 2'd0) begin
+                        idx <= 7'd32;
+                        cnt <= 2'd1;
+                    end else if (cnt == 2'd1) begin
+                        idx <= 7'd40;
+                        cnt <= 2'd2;
+                    end else begin
+                        idx <= 7'd48;
+                        cnt <= 2'd0;
+                    end
+                end
+                default: idx <= 7'd0;
+            endcase
+        end
+    end
+endmodule
+
+module row_gen(clk, rst, idx, row, idx_cnt);
+  input clk, rst;
+  input[6:0] idx;
+  output[7:0] row;
+  output[6:0] idx_cnt;
+  reg[7:0] row;
+  reg[6:0] idx_cnt;
+  reg[2:0] cnt;
+
+  always @(posedge clk or posedge rst) begin
+    if (rst) begin
+      row <= 8'b0000_0001; // Start with the first row
+      cnt <= 3'd0;
+      idx_cnt <= 7'd0;
+    end else begin
+      row <= 8'b0000_0001 << cnt; // Shift to the next row
+      cnt <= cnt + 3'd1; // Increment the row counter
+      if (cnt == 3'd7) begin
+        cnt <= 3'd0; // Reset row counter after reaching the last row
+      end
+      idx_cnt <= idx + cnt; // Update index counter to match current row
+    end
+  end
+endmodule
+
+//this module will scan all digits on 7segments display 
+//and display number appropriatedly in g1_cnt(hang don vi, hang chuc) or g2_cnt
+/*module count_logic(
 	 input day_night,
     input [7:0] g1_cnt,
     input [7:0] g2_cnt,
@@ -59,9 +173,8 @@ module count_logic(
 				end
 		end
    
-endmodule
+endmodule*/
 
-/*
 module count_logic(
 	 input day_night,
     input [7:0] g1_cnt,
@@ -69,53 +182,111 @@ module count_logic(
     input [2:0] seg7_sel,
     output reg [3:0] count_out
 );
+	//checking if it is displaying the nth Led from right to left
     always @(*) begin
         if (day_night) begin
-            if (g1_cnt > 0) // counting down for light 1
-                if (g1_cnt > 8'd9)
-                    count_out = (seg7_sel == 3'b101) ? ((g1_cnt - 8'd9) % 10) : ((g1_cnt - 8'd9) / 10);
-                else 
-                    count_out = 4'b0;
-            else if (g2_cnt > 0) // counting down for light 2
-                if (g2_cnt > 8'd9)
-                    count_out = (seg7_sel == 3'b101) ? ((g2_cnt - 8'd9) % 10) : ((g2_cnt - 8'd9) / 10);
-                else 
-                    count_out = 4'b0;
-            else
-                count_out = 4'd0;
-        end else begin
-            count_out = 4'd0;
-        end
+            if (seg7_sel == 3'b101) begin //right most
+					count_out = g2_cnt >= 8'd9 ?  ((g2_cnt - 8'd9) % 10) : 
+																	(g2_cnt[3:0] >=8'd3) ? (g2_cnt - 8'd3) : g2_cnt[3:0]; 
+				end else if (seg7_sel == 3'b100) begin//second rightmost
+					count_out = g2_cnt >= 8'd9 ?  ((g2_cnt - 8'd9) / 10) : 4'b1111;
+				end else if (seg7_sel == 3'b011) begin
+					count_out = 4'b1111; //not display at this poistion
+				end else if (seg7_sel == 3'b010) begin//first character of count
+					count_out = g1_cnt >= 8'd9 ?  ((g1_cnt - 8'd9) % 10) :  
+																	(g1_cnt[3:0] >=8'd3) ? (g1_cnt - 8'd3) : g1_cnt[3:0];
+				end else if (seg7_sel == 3'b0001) begin //second character of count
+					count_out = g1_cnt >= 8'd9 ?  ((g1_cnt - 8'd9) / 10) : 4'b1111;
+				end else 
+					count_out = 4'b1111; //not display at this poistion as 
+				end
+		end
+   
+endmodule
+
+
+module rom_char(
+    input  [6:0] addr,
+    output reg [7:0] data
+);
+
+    always @(addr) begin
+        case(addr)
+            // Blank
+            7'd0: data = 8'h00;
+            7'd1: data = 8'h00;
+            7'd2: data = 8'h00;
+            7'd3: data = 8'h00;
+            7'd4: data = 8'h00;
+            7'd5: data = 8'h00;
+            7'd6: data = 8'h00;
+            7'd7: data = 8'h00;
+            // Standing (from 7'd8 to 7'd15)
+            7'd8:  data = 8'h18;
+            7'd9:  data = 8'h18;
+            7'd10: data = 8'h18;
+            7'd11: data = 8'h18;
+            7'd12: data = 8'h3C;
+            7'd13: data = 8'h7E;
+            7'd14: data = 8'h00;
+            7'd15: data = 8'h00;
+				
+		
+            // Walking Frame 1 (from 7'd16 to 7'd23)
+            7'd16: data = 8'h18;
+            7'd17: data = 8'h18;
+            7'd18: data = 8'h18;
+            7'd19: data = 8'h3C;
+            7'd20: data = 8'h7E;
+            7'd21: data = 8'h0C;
+            7'd22: data = 8'h18;
+            7'd23: data = 8'h00;
+
+            // Walking Frame 2 (from 7'd24 to 7'd31)
+            7'd24: data = 8'h18;
+            7'd25: data = 8'h18;
+            7'd26: data = 8'h18;
+            7'd27: data = 8'h3C;
+            7'd28: data = 8'h7E;
+            7'd29: data = 8'h18;
+            7'd30: data = 8'h30;
+            7'd31: data = 8'h00;
+
+            // Running Frame 1 (from 7'd32 to 7'd39)
+            7'd32: data = 8'h18;
+            7'd33: data = 8'h18;
+            7'd34: data = 8'h18;
+            7'd35: data = 8'h3C;
+            7'd36: data = 8'h7E;
+            7'd37: data = 8'h18;
+            7'd38: data = 8'h30;
+            7'd39: data = 8'h00;
+
+            // Running Frame 2 (from 7'd40 to 7'd47)
+            7'd40: data = 8'h18;
+            7'd41: data = 8'h18;
+            7'd42: data = 8'h18;
+            7'd43: data = 8'h3C;
+            7'd44: data = 8'h7E;
+            7'd45: data = 8'h0C;
+            7'd46: data = 8'h18;
+            7'd47: data = 8'h00;
+
+            // Running Frame 3 (from 7'd48 to 7'd55)
+            7'd48: data = 8'h18;
+            7'd49: data = 8'h18;
+            7'd50: data = 8'h18;
+            7'd51: data = 8'h3C;
+            7'd52: data = 8'h7E;
+            7'd53: data = 8'h30;
+            7'd54: data = 8'h18;
+            7'd55: data = 8'h00;
+
+            default: data = 8'h00;
+        endcase
     end
 endmodule
-*/
 
-module calculate_count(clk_fst, rst,day_night,seg7_sel,g1_cnt,g2_cnt,count_out);
-	 input clk_fst,rst,day_night,seg7_sel;
-	 input wire[7:0] g1_cnt, g2_cnt;
-
-	 output reg[3:0] count_out;
-	 always @(*) begin
-			if (rst) begin
-				count_out <= 3'b0;
-			end else if (day_night == 1'b1) begin
-						if (g1_cnt >0) // counting down for light 1
-							if (g1_cnt >= 8'd9)
-							  count_out = (seg7_sel == 3'b101) ? ((g1_cnt - 8'd9) % 10 ): ((g1_cnt - 8'd9) / 10 );
-							 else 
-								 count_out = (seg7_sel == 3'b101) ? g1_cnt[3:0] : g1_cnt[7:4];
-						else if (g2_cnt >0) //counting down for light 2
-							 if (g2_cnt >= 8'd9)
-							  count_out = (seg7_sel == 3'b101) ? ((g2_cnt - 8'd9) % 10 ): ((g2_cnt - 8'd9) / 10 );
-							 else 
-								 count_out = (seg7_sel == 3'b101) ? g2_cnt[3:0] : g2_cnt[7:4];
-						else
-							 count_out = 4'd0;
-				  end else begin
-						count_out = 4'd0;
-				  end
-			 end
-endmodule
 
 
 module traffic (clk_fst, clk_cnt_dn, rst, day_night, g1_cnt, g2_cnt, light_led);
@@ -204,6 +375,7 @@ endmodule
 
 
 
+
 module light_cnt_dn_29 (clk, rst, enable, cnt);
 	input clk, rst, enable;
 	output[7:0] cnt;
@@ -221,8 +393,6 @@ module light_cnt_dn_29 (clk, rst, enable, cnt);
 				cnt = 8'b0; // set cnt to 0 if enable is not set
 	end
 endmodule
-
-
 
 
 module bcd_to_seg7(bcd_in, seg7);
@@ -255,7 +425,7 @@ module freq_div(clk_in, reset, clk_out);
 	reg[exp-1:0] divider;
 	integer i;
 	assign clk_out= divider[exp-1];
-	always@ (posedge clk_in or posedge reset) //正緣觸發
+	always@ (posedge clk_in or posedge reset) //
 	begin
 		if(reset)
 			for(i=0; i < exp; i=i+1)
